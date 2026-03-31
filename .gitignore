@@ -1,25 +1,7 @@
-# .gitignore
-
-# Environment variables — NEVER commit these
 .env
-
-# Google OAuth tokens — contains your personal auth token
 token.json
-
-# Google credentials — contains your client secret
 credentials.json
-
-# Python cache
 __pycache__/
 *.pyc
-*.pyo
-.pytest_cache/
-
-# Virtual environment
-venv/
-env/
-.venv/
-
-# IDE
-.vscode/
-.idea/
+.git/
+*.json:Zone.Identifier
