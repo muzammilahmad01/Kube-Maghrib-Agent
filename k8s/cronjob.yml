@@ -1,0 +1,92 @@
+# k8s/cronjob.yaml
+# ─────────────────────────────────────────────────────────────────
+# Kubernetes CronJob — Maghrib Wazifa Reminder Agent
+# Fires every hour between 9AM-5PM on Fridays (PKT = UTC+5)
+# PKT 9AM  = UTC 4AM  → so we use UTC times in the schedule
+# PKT 5PM  = UTC 12PM
+# ─────────────────────────────────────────────────────────────────
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: maghrib-wazifa-agent
+  namespace: default
+
+spec:
+  # ── Schedule ───────────────────────────────────────────────────
+  # Cron format: minute hour day month weekday
+  # 0 4-12 * * 5 means:
+  #   minute=0 (top of every hour)
+  #   hour=4-12 UTC (= 9AM-5PM PKT)
+  #   day=* (any day of month)
+  #   month=* (any month)
+  #   weekday=5 (Friday)
+  schedule: "7 19 * * 5"
+
+  # ── Reliability Setting ────────────────────────────────────────
+  # If Minikube was off during scheduled time, allow up to
+  # 48 hours (172800 seconds) to run the missed job
+  # This is your safety net for when laptop was closed
+  startingDeadlineSeconds: 172800
+
+  # ── Prevent Overlapping Runs ───────────────────────────────────
+  # If a job is still running when next one triggers, skip it
+  concurrencyPolicy: Forbid
+
+  # ── History Settings ───────────────────────────────────────────
+  # Keep last 3 successful and 1 failed job logs for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+
+  jobTemplate:
+    spec:
+      # Retry once if the job fails (e.g. API timeout)
+      backoffLimit: 1
+
+      template:
+        spec:
+          # ── Restart Policy ──────────────────────────────────────
+          # Never restart — if it fails, CronJob handles retry
+          # via backoffLimit above
+          restartPolicy: Never
+
+          containers:
+            - name: maghrib-agent
+              image: muzammil588/maghrib-agent:latest
+
+              # ── Tell K8s to use local image ─────────────────────
+              # Never pull from DockerHub — use what's in Minikube
+              imagePullPolicy: Always
+
+              # ── Environment Variables (from Secret) ─────────────
+              env:
+                - name: GROK_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: agent-env          # Secret name
+                      key: GROK_API_KEY        # Key inside the secret
+
+              # ── Mount Secrets as Files ───────────────────────────
+              # token.json and credentials.json are mounted
+              # directly into /app/ inside the container
+              # so agent.py finds them exactly where it expects
+              volumeMounts:
+                - name: google-credentials
+                  mountPath: /app/credentials.json
+                  subPath: credentials.json
+                  readOnly: true
+
+                - name: google-token
+                  mountPath: /app/token.json
+                  subPath: token.json
+                  readOnly: true
+
+          # ── Define the Secret Volumes ───────────────────────────
+          volumes:
+            - name: google-credentials
+              secret:
+                secretName: google-credentials   # K8s Secret name
+
+            - name: google-token
+              secret:
+                secretName: google-token         # K8s Secret name
